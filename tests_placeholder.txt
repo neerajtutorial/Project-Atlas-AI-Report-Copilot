@@ -1,0 +1,6 @@
+Quick smoke tests:
+1. GET /health returns status=ok.
+2. C-01 2024 market size shows R-101 and R-102 with scope difference.
+3. C-02 R-101 query does not include the R-101 numeric value.
+4. Delete rows question refuses without executing user-supplied SQL.
+5. 2035 forecast creates an escalation.

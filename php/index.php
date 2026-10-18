@@ -1,0 +1,25 @@
+<?php
+// Standalone demo page for Docker. The CodeIgniter 3 controller/library/view are also included under application/.
+session_start();
+$answer = null; $error = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $csrf = $_POST['csrf'] ?? '';
+  if (!hash_equals($_SESSION['csrf'] ?? '', $csrf)) { http_response_code(400); $error = 'Session token expired. Refresh the page and try again.'; }
+  else {
+    $client = preg_replace('/[^A-Z0-9-]/', '', strtoupper($_POST['client_id'] ?? 'C-01'));
+    $question = trim($_POST['question'] ?? '');
+    if (strlen($question) < 3 || strlen($question) > 4000) $error = 'Question must be between 3 and 4000 characters.';
+    else {
+      $payload = json_encode(['client_id'=>$client, 'question'=>$question]);
+      $ch = curl_init('http://api:8000/chat');
+      curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>$payload, CURLOPT_HTTPHEADER=>['Content-Type: application/json','X-API-Key'=>getenv('ATLAS_API_KEY') ?: 'local-dev-key-change-me'], CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>3, CURLOPT_TIMEOUT=>25]);
+      $raw = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $curlError = curl_error($ch); curl_close($ch);
+      if ($raw === false || $code >= 500) $error = 'The report assistant is temporarily unavailable. Please try again or contact an analyst.';
+      else { $answer = json_decode($raw, true); if (!is_array($answer) || $code >= 400) $error = 'Could not process the request. Check client ID and try again.'; }
+    }
+  }
+}
+$_SESSION['csrf'] = bin2hex(random_bytes(24));
+function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atlas Report Copilot</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e8eef9;font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:900px;margin:36px auto;padding:20px}.hero{padding:28px;border:1px solid #25334b;border-radius:20px;background:linear-gradient(135deg,#15243b,#101827)}h1{margin:0 0 6px;font-size:30px}.muted{color:#a7b5ca}.panel{margin-top:18px;padding:24px;border:1px solid #26354c;border-radius:18px;background:#111b2b}label{display:block;margin:12px 0 6px;color:#c9d5e6}input,select,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #354761;background:#0b1422;color:#fff;font:inherit}textarea{min-height:120px;resize:vertical}button{margin-top:16px;background:#9cebd7;color:#10231f;border:0;border-radius:10px;padding:12px 18px;font-weight:750;cursor:pointer}.error{border-color:#8e4545;color:#ffd1d1}.answer{white-space:pre-wrap}.meta{font-size:14px;color:#9fb1ca}a{color:#9cebd7}.pill{display:inline-block;border:1px solid #35516a;padding:3px 8px;border-radius:99px;font-size:12px;margin:2px}</style></head><body><div class="wrap"><div class="hero"><div class="muted">COGNITIVE MARKET RESEARCH · DEMO</div><h1>Project Atlas</h1><div class="muted">Entitlement-aware Report Copilot · cited answers · safe escalation</div></div><div class="panel"><form method="post"><input type="hidden" name="csrf" value="<?=e($_SESSION['csrf'])?>"><label for="client_id">Demo client</label><select name="client_id" id="client_id"><option value="C-01" <?=($_POST['client_id']??'C-01')==='C-01'?'selected':''?>>C-01 · Northwind Utilities</option><option value="C-02" <?=($_POST['client_id']??'')==='C-02'?'selected':''?>>C-02 · Blue Delta Infra (R-103 only)</option></select><label for="question">Ask a market research question</label><textarea id="question" name="question" maxlength="4000" required placeholder="What was the global smart water meter market size in 2024?"><?=e($_POST['question']??'')?></textarea><button type="submit">Ask Atlas →</button></form></div><?php if($error): ?><div class="panel error"><?=e($error)?></div><?php endif; ?><?php if($answer): ?><div class="panel"><div class="meta">Answer · confidence <?=e(round(($answer['confidence']??0)*100))?>% · intent <?=e($answer['intent']??'')?><?php if(!empty($answer['escalated'])): ?> · <span class="pill">Escalated to analyst</span><?php endif;?></div><h2>Response</h2><div class="answer"><?=e($answer['answer']??'No answer returned.')?></div><?php if(!empty($answer['citations'])): ?><h3>Citations</h3><?php foreach($answer['citations'] as $c): ?><div class="meta">[<?=e($c['report_id']??'')?><?=isset($c['page'])?' · page '.e($c['page']):''?>] <?=e($c['quote']??'')?></div><?php endforeach; endif; ?><?php if(!empty($answer['conflicts'])): ?><h3>Conflicts</h3><pre class="answer"><?=e(json_encode($answer['conflicts'],JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES))?></pre><?php endif; ?><?php if(!empty($answer['derived_values'])): ?><h3>Derived values</h3><pre class="answer"><?=e(json_encode($answer['derived_values'],JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES))?></pre><?php endif; ?></div><?php endif; ?><div class="panel meta">Demo data is fictional. Use C-02 to verify that paid-report figures from R-101 are not disclosed. Change the development API key before sharing this environment.</div></div></body></html>
